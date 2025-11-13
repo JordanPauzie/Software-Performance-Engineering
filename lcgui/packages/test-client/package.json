@@ -1,0 +1,20 @@
+{
+  "name": "@lcgui/test-client",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "start": "npm run build && node dist/client.js",
+    "dev": "nodemon --watch 'src/**/*.ts' --exec tsx src/client.ts",
+    "build": "tsc -p ."
+  },
+  "license": "ISC",
+  "devDependencies": {
+    "nodemon": "^3.1.7",
+    "tsx": "^4.19.2",
+    "typescript": "^5.2.2"
+  },
+  "dependencies": {
+    "@lcgui/shared": "^1.0.0",
+    "socket.io-client": "^4.8.1"
+  }
+}

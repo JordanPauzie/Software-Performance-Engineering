@@ -1,0 +1,23 @@
+{
+  "name": "@lcgui/server",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "start": "npm run build && node dist/server.js",
+    "dev": "npm run addref && nodemon --watch 'src/**/*.ts' --exec tsx src/server.ts",
+    "build": "npm run addref && tsc -p .",
+    "addref": "cp ../../../player/leiserchess ./resources/referee"
+  },
+  "license": "ISC",
+  "devDependencies": {
+    "nodemon": "^3.1.7",
+    "tsx": "^4.19.2",
+    "typescript": "^5.2.2"
+  },
+  "dependencies": {
+    "@lcgui/shared": "^1.0.0",
+    "@types/node": "^22.8.1",
+    "async-mutex": "^0.5.0",
+    "socket.io": "^4.8.1"
+  }
+}

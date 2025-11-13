@@ -1,0 +1,13 @@
+cpus = 2
+game_rounds = 10
+title = basic
+adjudicate = 400
+verbose = true
+
+player = player_1
+invoke = ../player/leiserchess
+fis = 10 1
+
+player = player_2
+invoke = ../player/leiserchess
+fis = 10 1
