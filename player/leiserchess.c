@@ -297,6 +297,8 @@ void help() {
   fprintf(OUT, "info move      - Make a move for current player.\n");
   fprintf(OUT, "info             Sample usage: \n");
   fprintf(OUT, "info                 move j0j1: move a piece from j0 to j1\n");
+  fprintf(OUT, "info movehistory - Print space-separated list of moves leading to current position.\n");
+  fprintf(OUT, "info piecelist - List all pieces on the board with positions and orientations.\n");
   fprintf(OUT,
           "info "
           "perft     - Output the number of possible moves up to a given"
@@ -348,6 +350,8 @@ void help() {
           "info "
           "                setoption name fut_depth value 4: set"
           " fut_depth to 4\n");
+
+  fprintf(OUT, "info ttable    - Show transposition table statistics and current position lookup.\n");
   fprintf(OUT, "info uci       - Display UCI version and options\n");
   fprintf(OUT, "\n");
 }
@@ -806,6 +810,81 @@ int main(int argc, char* argv[]) {
           fprintf(OUT, "%s ", buf);
         }
         fprintf(OUT, "\n");
+        continue;
+      }
+
+      if (strcmp(tok[0], "movehistory") == 0) {
+        /* Print space-separated list of moves that led to current position. */
+        position_t* cur = &gme[ix];
+        int ply = cur->ply;
+
+        if (ply == 0) {
+          /* No moves yet */
+          fprintf(OUT, "No moves yet\n");
+          continue;
+        }
+
+        move_t moves[MAX_PLY_IN_GAME];
+
+        /* Walk backwards through history to collect moves in order */
+        for (int i = ply; i > 0; i--) {
+          moves[i - 1] = cur->last_move;
+          cur = cur->history;
+        }
+
+        for (int i = 0; i < ply; i++) {
+          char mv_str[MAX_CHARS_IN_MOVE];
+          move_to_str(moves[i], mv_str, MAX_CHARS_IN_MOVE);
+          if (i > 0) fprintf(OUT, " ");
+          fprintf(OUT, "%s", mv_str);
+        }
+        fprintf(OUT, "\n");
+        continue;
+      }
+      /* List all pieces on the board with their positions and orientations */
+      if (strcmp(tok[0], "piecelist") == 0) {
+        board_t* board = &gme[ix].board;
+        fprintf(OUT, "info Pieces on board:\n");
+        
+        for (int fil = 0; fil < BOARD_WIDTH; fil++) {
+          for (int rnk = 0; rnk < BOARD_WIDTH; rnk++) {
+            square_t sq = square_of(fil, rnk);
+            piece_t piece = get_piece_at(board, sq);
+  
+            if (piece.typ != EMPTY) {
+              char sq_str[5];
+              square_to_str(sq, sq_str, 5);
+              
+              const char* piece_type = (piece.typ == PAWN) ? "pawn" : 
+                                      (piece.typ == MONARCH) ? "monarch" : "unknown";
+              const char* piece_color = color_to_str(piece.color);
+              
+              if (piece.typ == PAWN) {
+                fprintf(OUT, "info %s %s %s ori=%d\n", sq_str, piece_color, piece_type, ordinal_dir_to_index(piece.pawn_ori));
+              } else if (piece.typ == MONARCH) {
+                fprintf(OUT, "info %s %s %s ori=%d\n", sq_str, piece_color, piece_type, cardinal_dir_to_index(piece.monarch_ori));
+              } else {
+                fprintf(OUT, "info %s %s %s\n", sq_str, piece_color, piece_type);
+              }
+            }
+          }
+        }
+        continue;
+      }
+
+      if (strcmp(tok[0], "ttable") == 0) {
+        /* Show transposition table information */
+        fprintf(OUT, "info === TRANSPOSITION TABLE ===\n");
+
+        /* Basic table statistics */
+        uint32_t num_records = tt_get_num_of_records();
+        size_t bytes_per_record = tt_get_bytes_per_record();
+        size_t total_size = num_records * bytes_per_record;
+        
+        fprintf(OUT, " Table size: %u records\n", num_records);
+        fprintf(OUT, " Bytes per record: %zu\n", bytes_per_record);
+        fprintf(OUT, " Total table size: %zu bytes (%.2f MB)\n", 
+                total_size, (double)total_size / (1024 * 1024));
         continue;
       }
 

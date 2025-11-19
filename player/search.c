@@ -252,12 +252,18 @@ score_t searchRoot(position_t* p, score_t alpha, score_t beta, int depth,
     // we are at depth 1; generate all possible moves
     num_of_moves = generate_all(p, move_list);
     // shuffle the list of moves
+   #if DETERMINISTIC
+
+   #else
+    // shuffle the list of moves
     for (int i = 0; i < num_of_moves; i++) {
-      int r = myrand() % num_of_moves;
-      sortable_move_t tmp = move_list[i];
-      move_list[i] = move_list[r];
-      move_list[r] = tmp;
+        int r = myrand() % num_of_moves;
+        sortable_move_t tmp = move_list[i];
+        move_list[i] = move_list[r];
+        move_list[r] = tmp;
     }
+    #endif
+
   }
 
   searchNode rootNode;

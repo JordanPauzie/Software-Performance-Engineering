@@ -20,8 +20,10 @@ DEBUG := 0
 FLTO := 0
 VERBOSE := 0
 
+DETERMINISTIC ?= 0 
+
 COMMONFLAGS := -Wall -Werror -Wextra
-CFLAGS := $(COMMONFLAGS) -std=gnu99 -g
+CFLAGS := $(COMMONFLAGS) -std=gnu99 -g -DDETERMINISTIC=$(DETERMINISTIC)
 # LDFLAGS := $(COMMONFLAGS) -fuse-ld=lld -static -pthread -lm -ldl
 LDFLAGS := $(COMMONFLAGS) -static -pthread -lm -ldl
 
