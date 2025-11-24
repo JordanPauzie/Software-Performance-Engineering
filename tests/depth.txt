@@ -4,9 +4,9 @@ title = basic
 adjudicate = 400
 
 player = player_1
-invoke = ../player/leiserchess
+invoke = ../player/leiserchess_original
 depth = 3
 
 player = player_2
 invoke = ../player/leiserchess
-depth = 5
+depth = 3
