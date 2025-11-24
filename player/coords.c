@@ -32,8 +32,6 @@ int square_to_str(square_t sq, char* buf, size_t bufsize) {
   return snprintf(buf, bufsize, "%c%d", 'a' + fil_of(sq), rnk_of(sq));
 }
 
-int square_to_index(square_t sq) { return sq.val; }
-
 square_t get_midpoint(square_t a, square_t b) {
   return (square_t){.val = (a.val + b.val) / 2};
 }

@@ -17,7 +17,7 @@ board_t init_board() {
       square_t sq = square_of(fil, rnk);
       result.pieces[sq.val].typ = EMPTY;
       result.zob_key =
-          toggle_piece(result.zob_key, sq, get_piece_at(&result, sq));
+          toggle_piece(result.zob_key, sq, result.pieces[square_to_index(sq)]);
     }
   }
 
@@ -69,7 +69,7 @@ void set_piece_at(board_t* board, square_t sq, piece_t piece) {
   }
 
   board->zob_key = toggle_piece(
-      toggle_piece(board->zob_key, sq, old_piece), sq, piece);
+      toggle_piece(board->zob_key, sq, old_piece), sq, board->pieces[square_to_index(sq)]);
   board->pieces[idx] = piece;
 }
 
