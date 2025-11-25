@@ -25,7 +25,7 @@ DETERMINISTIC ?= 0
 COMMONFLAGS := -Wall -Werror -Wextra
 CFLAGS := $(COMMONFLAGS) -std=gnu99 -g -DDETERMINISTIC=$(DETERMINISTIC)
 # LDFLAGS := $(COMMONFLAGS) -fuse-ld=lld -static -pthread -lm -ldl
-LDFLAGS := $(COMMONFLAGS) -static -pthread -lm -ldl
+LDFLAGS := $(COMMONFLAGS) -pthread -lm -ldl
 
 ifeq ($(PARALLEL),1)
 	CFLAGS += -DPARALLEL -fopencilk
