@@ -55,8 +55,9 @@ coord_t fil_of(square_t sq);
 coord_t rnk_of(square_t sq);
 bool square_eq(square_t a, square_t b);
 int square_to_str(square_t sq, char* buf, size_t bufsize);
-int square_to_index(square_t sq);
-square_t get_midpoint(square_t a, square_t b);
+static inline int square_to_index(square_t sq) {
+  return sq.val;
+}square_t get_midpoint(square_t a, square_t b);
 void check_square(square_t sq);
 void check_valid_square(square_t sq);
 
