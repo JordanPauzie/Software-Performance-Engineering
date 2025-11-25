@@ -5,6 +5,7 @@
 #include "zob.h"
 
 board_t init_board() {
+  // temporarily initialize positions with no square found yet
   board_t result = (board_t){.color_to_move = WHITE, .zob_key = 0,
                               .white_monarch = INVALID_SQUARE,
                               .black_monarch = INVALID_SQUARE};
@@ -59,7 +60,7 @@ void set_piece_at(board_t* board, square_t sq, piece_t piece) {
       board->black_monarch = sq;
     }
   } else {
-    // If we're placing a non-monarch piece at a square that was cached as a monarch,
+    // Invalidate monarch pos if different piece is being placed on monarch
     if (square_eq(board->white_monarch, sq)) {
       board->white_monarch = INVALID_SQUARE;
     }
@@ -101,10 +102,10 @@ void check_board_zob(const board_t* board) {
 }
 
 square_t get_monarch(const board_t* board, color_t c) {
-  // Use cached position, but validate it's correct
+  // Use cached monarch position
   square_t cached = (c == WHITE) ? board->white_monarch : board->black_monarch;
   
-  // Validate cache. check if cached square actually has a monarch of the right color
+  // Validate cache
   if (!square_eq(cached, INVALID_SQUARE)) {
     piece_t piece = get_piece_at(board, cached);
     if (piece.typ == MONARCH && piece.color == c) {
@@ -113,7 +114,7 @@ square_t get_monarch(const board_t* board, color_t c) {
     // Cache is invalid - fall through to scan and repair
   }
   
-  // Fallback; scan board if cache is invalid
+  // fallback ie original scanning the board
   for (coord_t fil = 0; fil < BOARD_WIDTH; fil++) {
     for (coord_t rnk = 0; rnk < BOARD_WIDTH; rnk++) {
       square_t sq = square_of(fil, rnk);
