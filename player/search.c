@@ -167,10 +167,11 @@ static score_t searchPV(searchNode* node, int depth,
   int num_of_moves = get_sortable_move_list(node, move_list, hash_table_move);
   int num_moves_tried = 0;
 
+  sort_insertion(move_list, num_of_moves);
   // Start searching moves.
   for (int mv_index = 0; mv_index < num_of_moves; mv_index++) {
     // Insertion sort the move list.
-    sort_insertion(move_list, num_of_moves);
+    
 
     move_t mv = get_move(move_list[mv_index]);
 
