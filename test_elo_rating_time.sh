@@ -15,6 +15,11 @@ NUM_GAMES=${1:-10}
 TIME_MS=${2:-1000}
 REFEREE="./tester/referee"
 
+# Set CILK_NWORKERS for parallel execution (default to number of CPU cores)
+if [ -z "$CILK_NWORKERS" ]; then
+    export CILK_NWORKERS=$(nproc)
+fi
+
 # Check if binaries exist
 if [ ! -f "$BASELINE" ]; then
     echo "Error: Baseline bot not found at $BASELINE"

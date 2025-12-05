@@ -27,9 +27,36 @@ calls searchPV() to perform the full search.
 #include "eval.h"
 #include "fen.h"
 #include "search.h"
+#include "simple_mutex.h"
 #include "tbassert.h"
 #include "tt.h"
 #include "util.h"
+
+#if PARALLEL
+#include <cilk/cilk.h>
+#endif
+
+// -----------------------------------------------------------------------------
+// Preprocessor
+
+// Note: parallel_parent_aborted is defined in search_scout.c which is included later
+
+// Structure to pass arguments to parallel move search tasks
+typedef struct {
+  searchNode* node;
+  move_t mv;
+  int mv_index;
+  killer_info_t killer_a;
+  killer_info_t killer_b;
+  simple_mutex_t* node_mutex;
+  uint64_t* node_count_serial;
+  bool* found_cutoff;
+} jamboree_move_args_t;
+
+#if PARALLEL
+// Forward declaration - implementation after includes
+static void jamboree_search_move(jamboree_move_args_t* args);
+#endif
 
 // -----------------------------------------------------------------------------
 // Preprocessor
@@ -96,6 +123,71 @@ static int get_sortable_move_list(searchNode* node, sortable_move_t* move_list,
 #include "./search_common.c"
 #include "./search_globals.c"
 #include "./search_scout.c"
+
+#if PARALLEL
+// Search a single move in parallel (for jamboree search)
+// Implementation after includes so it can access all declared functions
+static void jamboree_search_move(jamboree_move_args_t* args) {
+  searchNode* node = args->node;
+  move_t mv = args->mv;
+  int mv_index = args->mv_index;
+  killer_info_t killer_a = args->killer_a;
+  killer_info_t killer_b = args->killer_b;
+  simple_mutex_t* node_mutex = args->node_mutex;
+  uint64_t* node_count_serial = args->node_count_serial;
+  bool* found_cutoff = args->found_cutoff;
+
+  // Check if we should abort early (reduced abort checks for performance)
+  if (*found_cutoff) {
+    return;
+  }
+
+  // Increment node count atomically
+  __sync_fetch_and_add(node_count_serial, 1);
+
+  if (TRACE_MOVES) {
+    print_move_info(mv, node->ply, &node->position);
+  }
+
+  // Evaluate the move
+  moveEvaluationResult result = evaluateMove(node, mv, killer_a, killer_b,
+                                             SEARCH_PV, node_count_serial);
+
+  if (result.type == MOVE_ILLEGAL || result.type == MOVE_IGNORE) {
+    return;
+  }
+
+  // Check for abort again after evaluation (reduced abort checks for performance)
+  if (*found_cutoff) {
+    return;
+  }
+
+  // Acquire mutex to update shared state
+  simple_acquire(node_mutex);
+
+  // Check again after acquiring lock (another thread may have found cutoff)
+  if (*found_cutoff) {
+    simple_release(node_mutex);
+    return;
+  }
+
+  // A legal move, but when we are in quiescence
+  // we only want to count moves that has a capture.
+  if (result.type == MOVE_EVALUATED) {
+    node->legal_move_count++;
+  }
+
+  // Process the score and check for cutoff
+  bool cutoff = search_process_score(node, mv, mv_index, &result, SEARCH_PV);
+  
+  if (cutoff) {
+    *found_cutoff = true;
+    node->abort = true;
+  }
+
+  simple_release(node_mutex);
+}
+#endif
 
 // Initializes a PV (principal variation node)
 // https://www.chessprogramming.org/Node_Types#PV-Nodes
@@ -168,11 +260,196 @@ static score_t searchPV(searchNode* node, int depth,
   int num_moves_tried = 0;
 
   sort_insertion(move_list, num_of_moves);
-  // Start searching moves.
-  for (int mv_index = 0; mv_index < num_of_moves; mv_index++) {
-    // Insertion sort the move list.
+  
+#if PARALLEL
+  // YBW (Young Brothers Wait) parallelization
+  // For 250ms time limit, parallelization overhead hurts performance
+  // Disable parallelization to maximize depth reached in limited time
+  const int MAX_PARALLEL_MOVES = 16;  // Keep for code that won't execute
+  bool use_parallel = false;  // Disabled to reduce overhead and increase depth
+  
+  if (use_parallel) {
+    // YBW: Initialize synchronization for parallel search
+    simple_mutex_t node_mutex;
+    init_simple_mutex(&node_mutex);
+    bool found_cutoff = false;
     
+    // YBW Step 1: Search first move (youngest brother) serially
+    // This is usually the best move from hash table or move ordering
+    if (num_of_moves > 0) {
+      move_t mv = get_move(move_list[0]);
+      num_moves_tried++;
+      (*node_count_serial)++;
 
+      if (TRACE_MOVES) {
+        print_move_info(mv, node->ply, &node->position);
+      }
+      moveEvaluationResult result = evaluateMove(node, mv, killer_a, killer_b,
+                                                 SEARCH_PV, node_count_serial);
+
+      if (result.type != MOVE_ILLEGAL && result.type != MOVE_IGNORE) {
+        // A legal move, but when we are in quiescence
+        // we only want to count moves that has a capture.
+        if (result.type == MOVE_EVALUATED) {
+          node->legal_move_count++;
+        }
+
+        // Check if we should abort due to time control.
+        if (abortf) {
+          return 0;
+        }
+
+        bool cutoff = search_process_score(node, mv, 0, &result, SEARCH_PV);
+        if (cutoff) {
+          found_cutoff = true;
+          node->abort = true;
+        }
+      }
+    }
+    
+    // YBW Step 2: After first move completes, search remaining moves (older brothers) in parallel
+    // Limit to MAX_PARALLEL_MOVES to avoid overhead from too many small tasks
+    if (num_of_moves > 1 && !found_cutoff) {
+      int max_parallel = (num_of_moves - 1 < MAX_PARALLEL_MOVES) ? 
+                         (num_of_moves - 1) : MAX_PARALLEL_MOVES;
+      
+      for (int mv_index = 1; mv_index <= max_parallel && mv_index < num_of_moves; mv_index++) {
+        // Check if we should abort before spawning
+        if (should_abort_check() || found_cutoff) {
+          break;
+        }
+        
+        move_t mv = get_move(move_list[mv_index]);
+        
+        // Prepare arguments for parallel task
+        jamboree_move_args_t args;
+        args.node = node;
+        args.mv = mv;
+        args.mv_index = mv_index;
+        args.killer_a = killer_a;
+        args.killer_b = killer_b;
+        args.node_mutex = &node_mutex;
+        args.node_count_serial = node_count_serial;
+        args.found_cutoff = &found_cutoff;
+        
+        // Spawn parallel task to search this move (older brother)
+        cilk_spawn jamboree_search_move(&args);
+        
+        num_moves_tried++;
+      }
+      
+      // Wait for all spawned tasks to complete
+      cilk_sync;
+      
+      // YBW Step 3: Search remaining moves serially (if any)
+      // These are searched after parallel tasks complete, reducing contention
+      for (int mv_index = MAX_PARALLEL_MOVES + 1; mv_index < num_of_moves; mv_index++) {
+        if (should_abort_check() || found_cutoff) {
+          break;
+        }
+        
+        move_t mv = get_move(move_list[mv_index]);
+        num_moves_tried++;
+        (*node_count_serial)++;
+
+        if (TRACE_MOVES) {
+          print_move_info(mv, node->ply, &node->position);
+        }
+        moveEvaluationResult result = evaluateMove(node, mv, killer_a, killer_b,
+                                                   SEARCH_PV, node_count_serial);
+
+        if (result.type == MOVE_ILLEGAL || result.type == MOVE_IGNORE) {
+          continue;
+        }
+
+        if (result.type == MOVE_EVALUATED) {
+          node->legal_move_count++;
+        }
+
+        if (abortf) {
+          return 0;
+        }
+
+        bool cutoff = search_process_score(node, mv, mv_index, &result, SEARCH_PV);
+        if (cutoff) {
+          break;
+        }
+      }
+    } else if (num_of_moves > 1 && !found_cutoff) {
+      // Not enough moves for parallelization, search remaining serially
+      for (int mv_index = 1; mv_index < num_of_moves; mv_index++) {
+        if (should_abort_check() || found_cutoff) {
+          break;
+        }
+        
+        move_t mv = get_move(move_list[mv_index]);
+        num_moves_tried++;
+        (*node_count_serial)++;
+
+        if (TRACE_MOVES) {
+          print_move_info(mv, node->ply, &node->position);
+        }
+        moveEvaluationResult result = evaluateMove(node, mv, killer_a, killer_b,
+                                                   SEARCH_PV, node_count_serial);
+
+        if (result.type == MOVE_ILLEGAL || result.type == MOVE_IGNORE) {
+          continue;
+        }
+
+        if (result.type == MOVE_EVALUATED) {
+          node->legal_move_count++;
+        }
+
+        if (abortf) {
+          return 0;
+        }
+
+        bool cutoff = search_process_score(node, mv, mv_index, &result, SEARCH_PV);
+        if (cutoff) {
+          break;
+        }
+      }
+    }
+  }
+  
+  // Serial search fallback (when parallelization conditions not met)
+  if (!use_parallel) {
+    for (int mv_index = 0; mv_index < num_of_moves; mv_index++) {
+      move_t mv = get_move(move_list[mv_index]);
+
+      num_moves_tried++;
+      (*node_count_serial)++;
+
+      if (TRACE_MOVES) {
+        print_move_info(mv, node->ply, &node->position);
+      }
+      moveEvaluationResult result = evaluateMove(node, mv, killer_a, killer_b,
+                                                 SEARCH_PV, node_count_serial);
+
+      if (result.type == MOVE_ILLEGAL || result.type == MOVE_IGNORE) {
+        continue;
+      }
+
+      // A legal move, but when we are in quiescence
+      // we only want to count moves that has a capture.
+      if (result.type == MOVE_EVALUATED) {
+        node->legal_move_count++;
+      }
+
+      // Check if we should abort due to time control.
+      if (abortf) {
+        return 0;
+      }
+
+      bool cutoff = search_process_score(node, mv, mv_index, &result, SEARCH_PV);
+      if (cutoff) {
+        break;
+      }
+    }
+  }
+#else
+  // Serial search (when PARALLEL is not defined at compile time)
+  for (int mv_index = 0; mv_index < num_of_moves; mv_index++) {
     move_t mv = get_move(move_list[mv_index]);
 
     num_moves_tried++;
@@ -204,6 +481,7 @@ static score_t searchPV(searchNode* node, int depth,
       break;
     }
   }
+#endif
 
   if (node->quiescence == false) {
     update_best_move_history(&(node->position), node->best_move_index,

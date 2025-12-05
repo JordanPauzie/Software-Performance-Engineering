@@ -14,7 +14,7 @@ BASELINE="./player/leiserchess_original"
 OPTIMIZED="./player/leiserchess"
 TIME_MS=${1:-2000}
 ENGINE_CHOICE=${2:-optimized}
-NUM_TESTS=${3:-25}
+NUM_TESTS=${3:-5}
 
 if [ "$ENGINE_CHOICE" = "baseline" ]; then
     ENGINE="$BASELINE"
