@@ -45,6 +45,8 @@ typedef struct {
   piece_t pieces[ARR_SIZE];
   color_t color_to_move;
   uint64_t zob_key;
+  square_t white_monarch;
+  square_t black_monarch;
 } board_t;
 
 typedef struct {
@@ -54,6 +56,10 @@ typedef struct {
 } laser_t;
 
 board_t init_board();
+
+static inline piece_t get_piece_at(const board_t* board, square_t sq) {
+  return board->pieces[sq.val];
+}
 piece_t get_piece_at(const board_t* board, square_t sq);
 void set_piece_at(board_t* board, square_t sq, piece_t piece);
 void toggle_color_to_move(board_t* board);
