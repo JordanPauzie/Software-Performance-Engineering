@@ -323,17 +323,69 @@ static moveEvaluationResult evaluateMove(searchNode* node, move_t mv,
   return result;
 }
 
+static void merge(sortable_move_t* arr, int l , int m , int r , sortable_move_t* temp ){
+  int i = l;
+  int j = m + 1;
+  int k = l;
+
+  while (i <= m && j <= r) {
+    if (arr[i].key >= arr[j].key) {  
+      temp[k] = arr[i];
+      i++;
+    } else {
+      temp[k] = arr[j];
+      j++;
+    }
+    k++;
+  }
+
+  while (i <= m) {
+    temp[k] = arr[i];
+    i++;
+    k++;
+  }
+
+  while (j <= r) {
+    temp[k] = arr[j];
+    j++;
+    k++;
+  }
+
+  for (i = l; i <= r; i++) {
+    arr[i] = temp[i];
+  }
+}
+static void merge_sort(sortable_move_t* arr, int l , int r, sortable_move_t* temp){
+  if (l < r) {
+    int m = l + (r - l) / 2;
+
+    if (r - l > 16) {  // Cutoff 
+      merge_sort(arr, l, m, temp);
+      merge_sort(arr, m + 1, r, temp);
+    } else {
+      merge_sort(arr, l, m, temp);
+      merge_sort(arr, m + 1, r, temp);
+    }
+
+    merge(arr, l, m, r, temp);
+  }
+}
+
 // Insertion sort of the move list.
 static void sort_insertion(sortable_move_t* move_list, int num_of_moves) {
-  for (int j = 0; j < num_of_moves; j++) {
-    sortable_move_t insert = move_list[j];
-    int hole = j;
-    while (hole > 0 && insert.key > move_list[hole - 1].key) {
-      move_list[hole] = move_list[hole - 1];
-      hole--;
-    }
-    move_list[hole] = insert;
-  }
+  // for (int j = 0; j < num_of_moves; j++) {
+  //   sortable_move_t insert = move_list[j];
+  //   int hole = j;
+  //   while (hole > 0 && insert.key > move_list[hole - 1].key) {
+  //     move_list[hole] = move_list[hole - 1];
+  //     hole--;
+  //   }
+  //   move_list[hole] = insert;
+  // }
+
+  sortable_move_t temp[MAX_NUM_MOVES];
+  merge_sort(move_list, 0, num_of_moves - 1, temp);
+
 }
 
 // Returns true if a cutoff was triggered, false otherwise.
