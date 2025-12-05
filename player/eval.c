@@ -282,6 +282,9 @@ score_t eval(position_t* p, bool verbose) {
   ev_score_t score[2][NUM_HEURISTICS] = {0};
   char sq_str[MAX_CHARS_IN_MOVE];
 
+  square_t white_monarch = get_monarch(&p->board, WHITE);
+  square_t black_monarch = get_monarch(&p->board, BLACK);
+
   for (coord_t fil = 0; fil < BOARD_WIDTH; fil++) {
     for (coord_t rnk = 0; rnk < BOARD_WIDTH; rnk++) {
       square_t sq = square_of(fil, rnk);
@@ -306,8 +309,9 @@ score_t eval(position_t* p, bool verbose) {
 
           // Pawn Distance to MONarch heuristic: sum of harmonic distance of
           // player's pieces to their monarch
-          if (!square_eq(get_monarch(&p->board, c), INVALID_SQUARE)) {
-            float prox_bonus = h_dist(sq, get_monarch(&p->board, c));
+          square_t my_monarch = (c == WHITE) ? white_monarch : black_monarch;
+          if (!square_eq(my_monarch, INVALID_SQUARE)) {
+            float prox_bonus = h_dist(sq, my_monarch);
             update_float(&score[c][PDMON], prox_bonus);
             if (verbose) {
               printf("PDMON bonus %.2f for %s Pawn on %s\n", prox_bonus,
@@ -316,9 +320,9 @@ score_t eval(position_t* p, bool verbose) {
           }
           // Pawn Distance to OPPonent heuristic: sum of harmonic distance of
           // player's pieces to opp monarch
-          if (!square_eq(get_monarch(&p->board, opp_color(c)),
-                         INVALID_SQUARE)) {
-            float prox_bonus = h_dist(sq, get_monarch(&p->board, opp_color(c)));
+          square_t opp_monarch = (c == WHITE) ? black_monarch : white_monarch;
+          if (!square_eq(opp_monarch, INVALID_SQUARE)) {
+            float prox_bonus = h_dist(sq, opp_monarch);
             update_float(&score[c][PDOPP], prox_bonus);
             if (verbose) {
               printf("PDMON bonus %.2f for %s Pawn on %s\n", prox_bonus,
@@ -365,8 +369,6 @@ score_t eval(position_t* p, bool verbose) {
 
           // PBOX heuristic: number of pawns in bounding box containing both
           // monarchs
-          square_t white_monarch = get_monarch(&p->board, WHITE);
-          square_t black_monarch = get_monarch(&p->board, BLACK);
           if (!square_eq(white_monarch, INVALID_SQUARE) &&
               !square_eq(black_monarch, INVALID_SQUARE)) {
             if ((rnk_of(sq) <= rnk_of(white_monarch) ||

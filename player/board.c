@@ -70,7 +70,7 @@ void set_piece_at(board_t* board, square_t sq, piece_t piece) {
   }
 
   board->zob_key = toggle_piece(
-    toggle_piece(board->zob_key, sq, old_piece), sq, piece);
+      toggle_piece(board->zob_key, sq, old_piece), sq, piece);
   board->pieces[idx] = piece;
 }
 
