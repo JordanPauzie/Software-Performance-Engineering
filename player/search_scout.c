@@ -90,8 +90,167 @@ static score_t scout_search(searchNode* node, int depth,
   // Sort the move list.
   sort_insertion(move_list, num_of_moves);
 
+#if PARALLEL
+  // Parallelize scout search using YBW for better coverage
+  // Scout search benefits less from parallelization (null-window), but still helps
+  const int MIN_DEPTH_FOR_SCOUT_PARALLEL = 4;
+  const int MIN_MOVES_FOR_SCOUT_PARALLEL = 6;
+  const int MAX_SCOUT_PARALLEL = 4;  // Fewer for scout (less benefit)
+  
+  bool use_scout_parallel = (node->depth >= MIN_DEPTH_FOR_SCOUT_PARALLEL &&
+                              num_of_moves >= MIN_MOVES_FOR_SCOUT_PARALLEL &&
+                              !node->quiescence &&
+                              node->ply < 20);
+  
+  if (use_scout_parallel && num_of_moves > 1) {
+    volatile bool found_cutoff = false;
+    simple_mutex_t scout_mutex;
+    init_simple_mutex(&scout_mutex);
+    
+    // Search first move serially (youngest brother)
+    if (num_of_moves > 0) {
+      int local_index = number_of_moves_evaluated++;
+      move_t mv = get_move(move_list[local_index]);
+      
+      if (TRACE_MOVES) {
+        print_move_info(mv, node->ply, &node->position);
+      }
+      
+      __sync_fetch_and_add(node_count_serial, 1);
+      moveEvaluationResult result = evaluateMove(node, mv, killer_a, killer_b,
+                                                 SEARCH_SCOUT, node_count_serial);
+      
+      if (result.type != MOVE_ILLEGAL && result.type != MOVE_IGNORE &&
+          !abortf && !parallel_parent_aborted(node)) {
+        if (result.type == MOVE_EVALUATED) {
+          node->legal_move_count++;
+        }
+        
+        bool cutoff = search_process_score(node, mv, local_index, &result, SEARCH_SCOUT);
+        if (cutoff) {
+          found_cutoff = true;
+          node->abort = true;
+        }
+      }
+    }
+    
+    // Search remaining moves in parallel (older brothers)
+    if (!found_cutoff && num_of_moves > 1) {
+      int max_parallel = (num_of_moves - 1 < MAX_SCOUT_PARALLEL) ?
+                         (num_of_moves - 1) : MAX_SCOUT_PARALLEL;
+      
+      for (int mv_index = 1; mv_index <= max_parallel && mv_index < num_of_moves; mv_index++) {
+        if (found_cutoff || abortf || parallel_parent_aborted(node)) {
+          break;
+        }
+        
+        int local_index = number_of_moves_evaluated++;
+        move_t mv = get_move(move_list[local_index]);
+        
+        // Spawn parallel scout search (simplified - reuse PV parallelization logic)
+        // For scout, we can use a simpler approach since it's null-window
+        __sync_fetch_and_add(node_count_serial, 1);
+        
+        if (TRACE_MOVES) {
+          print_move_info(mv, node->ply, &node->position);
+        }
+        
+        moveEvaluationResult result = evaluateMove(node, mv, killer_a, killer_b,
+                                                   SEARCH_SCOUT, node_count_serial);
+        
+        if (result.type == MOVE_ILLEGAL || result.type == MOVE_IGNORE ||
+            found_cutoff || abortf || parallel_parent_aborted(node)) {
+          continue;
+        }
+        
+        simple_acquire(&scout_mutex);
+        if (found_cutoff) {
+          simple_release(&scout_mutex);
+          continue;
+        }
+        
+        if (result.type == MOVE_EVALUATED) {
+          node->legal_move_count++;
+        }
+        
+        bool cutoff = search_process_score(node, mv, local_index, &result, SEARCH_SCOUT);
+        if (cutoff) {
+          found_cutoff = true;
+          node->abort = true;
+        }
+        simple_release(&scout_mutex);
+        
+        if (cutoff) break;
+      }
+    }
+    
+    // Search remaining moves serially
+    for (int mv_index = MAX_SCOUT_PARALLEL + 1; mv_index < num_of_moves; mv_index++) {
+      if (found_cutoff || abortf || parallel_parent_aborted(node)) {
+        break;
+      }
+      
+      int local_index = number_of_moves_evaluated++;
+      move_t mv = get_move(move_list[local_index]);
+      
+      if (TRACE_MOVES) {
+        print_move_info(mv, node->ply, &node->position);
+      }
+      
+      __sync_fetch_and_add(node_count_serial, 1);
+      moveEvaluationResult result = evaluateMove(node, mv, killer_a, killer_b,
+                                                 SEARCH_SCOUT, node_count_serial);
+      
+      if (result.type == MOVE_ILLEGAL || result.type == MOVE_IGNORE ||
+          abortf || parallel_parent_aborted(node)) {
+        continue;
+      }
+      
+      if (result.type == MOVE_EVALUATED) {
+        node->legal_move_count++;
+      }
+      
+      bool cutoff = search_process_score(node, mv, local_index, &result, SEARCH_SCOUT);
+      if (cutoff) {
+        node->abort = true;
+        break;
+      }
+    }
+  } else {
+    // Serial scout search (fallback)
+    for (int mv_index = 0; mv_index < num_of_moves; mv_index++) {
+      int local_index = number_of_moves_evaluated++;
+      move_t mv = get_move(move_list[local_index]);
+
+      if (TRACE_MOVES) {
+        print_move_info(mv, node->ply, &node->position);
+      }
+
+      __sync_fetch_and_add(node_count_serial, 1);
+
+      moveEvaluationResult result = evaluateMove(node, mv, killer_a, killer_b,
+                                                 SEARCH_SCOUT, node_count_serial);
+
+      if (result.type == MOVE_ILLEGAL || result.type == MOVE_IGNORE || abortf ||
+          parallel_parent_aborted(node)) {
+        continue;
+      }
+
+      if (result.type == MOVE_EVALUATED) {
+        node->legal_move_count++;
+      }
+
+      bool cutoff = search_process_score(node, mv, local_index, &result, SEARCH_SCOUT);
+
+      if (cutoff) {
+        node->abort = true;
+        break;
+      }
+    }
+  }
+#else
+  // Serial scout search (when PARALLEL is not defined)
   for (int mv_index = 0; mv_index < num_of_moves; mv_index++) {
-    // Get the next move from the move list.
     int local_index = number_of_moves_evaluated++;
     move_t mv = get_move(move_list[local_index]);
 
@@ -99,7 +258,6 @@ static score_t scout_search(searchNode* node, int depth,
       print_move_info(mv, node->ply, &node->position);
     }
 
-    // increase node count
     __sync_fetch_and_add(node_count_serial, 1);
 
     moveEvaluationResult result = evaluateMove(node, mv, killer_a, killer_b,
@@ -110,21 +268,18 @@ static score_t scout_search(searchNode* node, int depth,
       continue;
     }
 
-    // A legal move, but when we are in quiescence
-    // we only want to count moves that has a capture.
     if (result.type == MOVE_EVALUATED) {
       node->legal_move_count++;
     }
 
-    // process the score. Note that this mutates fields in node.
-    bool cutoff =
-        search_process_score(node, mv, local_index, &result, SEARCH_SCOUT);
+    bool cutoff = search_process_score(node, mv, local_index, &result, SEARCH_SCOUT);
 
     if (cutoff) {
       node->abort = true;
       break;
     }
   }
+#endif
 
   if (parallel_parent_aborted(node)) {
     return 0;

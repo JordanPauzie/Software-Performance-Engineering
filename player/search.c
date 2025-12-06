@@ -50,7 +50,7 @@ typedef struct {
   killer_info_t killer_b;
   simple_mutex_t* node_mutex;
   uint64_t* node_count_serial;
-  bool* found_cutoff;
+  volatile bool* found_cutoff;  // Volatile for atomic abort checking
 } jamboree_move_args_t;
 
 #if PARALLEL
@@ -135,12 +135,16 @@ static void jamboree_search_move(jamboree_move_args_t* args) {
   killer_info_t killer_b = args->killer_b;
   simple_mutex_t* node_mutex = args->node_mutex;
   uint64_t* node_count_serial = args->node_count_serial;
-  bool* found_cutoff = args->found_cutoff;
+  volatile bool* found_cutoff = args->found_cutoff;
 
-  // Check if we should abort early (reduced abort checks for performance)
+  // Fast abort check: if parent found cutoff, abort immediately (lock-free)
+  // This prevents wasted computation on subtrees that will be pruned
   if (*found_cutoff) {
     return;
   }
+
+  // Propagate abort flag to child nodes for fast termination
+  node->abort = false;  // Initialize, will be set if parent aborts
 
   // Increment node count atomically
   __sync_fetch_and_add(node_count_serial, 1);
@@ -149,7 +153,7 @@ static void jamboree_search_move(jamboree_move_args_t* args) {
     print_move_info(mv, node->ply, &node->position);
   }
 
-  // Evaluate the move
+  // Evaluate the move (this may spawn recursive parallel searches)
   moveEvaluationResult result = evaluateMove(node, mv, killer_a, killer_b,
                                              SEARCH_PV, node_count_serial);
 
@@ -157,15 +161,17 @@ static void jamboree_search_move(jamboree_move_args_t* args) {
     return;
   }
 
-  // Check for abort again after evaluation (reduced abort checks for performance)
+  // Check for abort after evaluation (another thread may have found cutoff)
+  // Use memory barrier to ensure we see the latest value
+  __sync_synchronize();
   if (*found_cutoff) {
     return;
   }
 
-  // Acquire mutex to update shared state
+  // Acquire mutex to update shared state atomically
   simple_acquire(node_mutex);
 
-  // Check again after acquiring lock (another thread may have found cutoff)
+  // Double-check abort after acquiring lock (critical section)
   if (*found_cutoff) {
     simple_release(node_mutex);
     return;
@@ -177,12 +183,16 @@ static void jamboree_search_move(jamboree_move_args_t* args) {
     node->legal_move_count++;
   }
 
-  // Process the score and check for cutoff
+  // Process the score and check for beta cutoff
+  // If cutoff found, signal all other parallel tasks to abort
   bool cutoff = search_process_score(node, mv, mv_index, &result, SEARCH_PV);
   
   if (cutoff) {
+    // Signal abort to all parallel tasks (atomic write with memory barrier)
+    __sync_synchronize();  // Ensure all previous writes are visible
     *found_cutoff = true;
-    node->abort = true;
+    node->abort = true;  // Also set node abort for recursive abort propagation
+    __sync_synchronize();  // Ensure abort flag is visible to other threads
   }
 
   simple_release(node_mutex);
@@ -262,17 +272,29 @@ static score_t searchPV(searchNode* node, int depth,
   sort_insertion(move_list, num_of_moves);
   
 #if PARALLEL
-  // YBW (Young Brothers Wait) parallelization
-  // For 250ms time limit, parallelization overhead hurts performance
-  // Disable parallelization to maximize depth reached in limited time
-  const int MAX_PARALLEL_MOVES = 16;  // Keep for code that won't execute
-  bool use_parallel = false;  // Disabled to reduce overhead and increase depth
+  // YBW (Young Brothers Wait) parallelization with speculative parallelism
+  // Parallelize alpha-beta search: search older brothers (moves after first) in parallel
+  // Use smart conditions to avoid overhead on shallow searches
+  const int MAX_PARALLEL_MOVES = 8;  // Limit parallel tasks to reduce overhead
+  const int MIN_DEPTH_FOR_PARALLEL = 2;  // Lower threshold: parallelize at depth 2+
+  const int MIN_MOVES_FOR_PARALLEL = 3;  // Lower threshold: need 3+ moves
+  
+  // Enable parallelization when conditions are met:
+  // - Sufficient depth (amortize overhead) - lowered to 2 for more activation
+  // - Enough moves (parallelize multiple moves) - lowered to 3
+  // - Not in quiescence (quiescence is fast, overhead hurts)
+  // - At reasonable ply (avoid deep recursion overhead) - increased to 30
+  bool use_parallel = (node->depth >= MIN_DEPTH_FOR_PARALLEL &&
+                       num_of_moves >= MIN_MOVES_FOR_PARALLEL &&
+                       !node->quiescence &&
+                       node->ply < 30);  // Increased recursion depth limit
   
   if (use_parallel) {
     // YBW: Initialize synchronization for parallel search
+    // Use volatile bool for fast, lock-free abort checking
     simple_mutex_t node_mutex;
     init_simple_mutex(&node_mutex);
-    bool found_cutoff = false;
+    volatile bool found_cutoff = false;  // Volatile for atomic reads/writes
     
     // YBW Step 1: Search first move (youngest brother) serially
     // This is usually the best move from hash table or move ordering
@@ -308,13 +330,16 @@ static score_t searchPV(searchNode* node, int depth,
     }
     
     // YBW Step 2: After first move completes, search remaining moves (older brothers) in parallel
-    // Limit to MAX_PARALLEL_MOVES to avoid overhead from too many small tasks
+    // Speculative parallelism: search moves that might be pruned by beta cutoff
+    // Limit parallel tasks to avoid overhead, prioritize better moves (earlier in list)
     if (num_of_moves > 1 && !found_cutoff) {
+      // Parallelize best moves first (better move ordering = less wasted work)
+      // Only parallelize moves that are likely to be searched (not obviously bad)
       int max_parallel = (num_of_moves - 1 < MAX_PARALLEL_MOVES) ? 
                          (num_of_moves - 1) : MAX_PARALLEL_MOVES;
       
       for (int mv_index = 1; mv_index <= max_parallel && mv_index < num_of_moves; mv_index++) {
-        // Check if we should abort before spawning
+        // Fast abort check before spawning (lock-free read)
         if (should_abort_check() || found_cutoff) {
           break;
         }
@@ -330,15 +355,17 @@ static score_t searchPV(searchNode* node, int depth,
         args.killer_b = killer_b;
         args.node_mutex = &node_mutex;
         args.node_count_serial = node_count_serial;
-        args.found_cutoff = &found_cutoff;
+        args.found_cutoff = (volatile bool*)&found_cutoff;  // Cast to match type
         
         // Spawn parallel task to search this move (older brother)
+        // This is speculative - the move might be pruned by beta cutoff
         cilk_spawn jamboree_search_move(&args);
         
         num_moves_tried++;
       }
       
       // Wait for all spawned tasks to complete
+      // Tasks will abort early if found_cutoff becomes true
       cilk_sync;
       
       // YBW Step 3: Search remaining moves serially (if any)
