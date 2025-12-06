@@ -70,7 +70,7 @@ void set_piece_at(board_t* board, square_t sq, piece_t piece) {
   }
 
   board->zob_key = toggle_piece(
-      toggle_piece(board->zob_key, sq, old_piece), sq, board->pieces[square_to_index(sq)]);
+      toggle_piece(board->zob_key, sq, old_piece), sq, piece);
   board->pieces[idx] = piece;
 }
 
@@ -105,8 +105,8 @@ square_t get_monarch(const board_t* board, color_t c) {
   // Use cached monarch position
   square_t cached = (c == WHITE) ? board->white_monarch : board->black_monarch;
   
-  // Validate cache
-  if (!square_eq(cached, INVALID_SQUARE)) {
+  // Validate cache (optimization: use direct comparison instead of square_eq)
+  if (cached.val != INVALID_SQUARE.val) {
     piece_t piece = get_piece_at(board, cached);
     if (piece.typ == MONARCH && piece.color == c) {
       return cached;

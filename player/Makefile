@@ -1,4 +1,4 @@
-CC := clang
+CC := clang-6106
 
 # You may not have the clang-6106 compiler i.e. 
 # if you are running running on a platform other than Athena VDI.

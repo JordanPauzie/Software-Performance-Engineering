@@ -262,6 +262,32 @@ static moveEvaluationResult evaluateMove(searchNode* node, move_t mv,
   if (victim_exists(victims) && !blunder) {
     ext = 1;
   }
+  
+  // Check extension: extend when monarch is threatened (in check)
+  // https://www.chessprogramming.org/Check_Extensions
+  // Critical positions where monarch is threatened deserve deeper search
+  if (ext == 0) {
+    color_t color_to_move = color_to_move_of(&(result.next_node.position));
+    square_t our_monarch = get_monarch(&(result.next_node.position.board), color_to_move);
+    color_t opp_color_val = (color_to_move == WHITE) ? BLACK : WHITE;
+    
+    // Check if opponent's laser threatens our monarch
+    if (our_monarch.val != INVALID_SQUARE.val) {
+      laser_t opp_laser = get_laser_origin(&(result.next_node.position.board), opp_color_val);
+      if (opp_laser.sq.val != INVALID_SQUARE.val) {
+        // Trace the laser to see if it hits our monarch
+        laser_t trace_laser = opp_laser;
+        while (!square_eq(trace_laser.sq, INVALID_SQUARE) && !trace_laser.is_hit) {
+          if (square_eq(trace_laser.sq, our_monarch)) {
+            // Our monarch is threatened - extend search
+            ext = 1;
+            break;
+          }
+          step_laser(&(result.next_node.position.board), &trace_laser);
+        }
+      }
+    }
+  }
 
   // Late move reductions - or LMR. Only done in scout search.
   //
