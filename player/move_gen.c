@@ -103,6 +103,100 @@ square_t fire_laser(const position_t* p, color_t c) {
 // Generate all moves from position p.  Returns number of moves.
 //
 // https://www.chessprogramming.org/Move_Generation
+// int generate_all(const position_t* p, sortable_move_t* sortable_move_list) {
+//   color_t color_to_move = color_to_move_of(p);
+//   int move_count = 0;
+
+//   for (coord_t fil = 0; fil < BOARD_WIDTH; fil++) {
+//     for (coord_t rnk = 0; rnk < BOARD_WIDTH; rnk++) {
+//       square_t sq = square_of(fil, rnk);
+//       piece_t piece = get_piece_at(&p->board, sq);
+
+//       ptype_t typ = piece.typ;
+
+//       if (typ != PAWN && typ != MONARCH) continue;
+//       if (piece.color != color_to_move) continue;
+
+//       // directions
+//       ordinal_dir_t valid_moves[] = {
+//           make_ordinal(NORTH, WEST), make_ordinal(NORTH, EAST),
+//           make_ordinal(SOUTH, EAST), make_ordinal(SOUTH, WEST)};
+//       for (int d = 0; d < (int)(sizeof(valid_moves) / sizeof(*valid_moves)); d++) {
+//         ordinal_dir_t dir = valid_moves[d];
+//         square_t dest = take_ordinal_step(sq, dir);
+
+//         // BUG: Skip the NORTH-EAST direction for testing
+//         // if (dir.file_component.is_north && dir.rank_component.is_east) {
+//         //   continue;  // skip this move to introduce a minor bug
+//         // }
+
+//         if (get_piece_at(&p->board, dest).typ != EMPTY) continue;
+
+//         VERBOSE_LOG_MOVE(1, "Before: %s ", move_of(NO_ROT, sq, dest));
+//         tbassert(move_count < MAX_NUM_MOVES, "move_count: %d\n", move_count);
+
+//         move_t mv = move_of(NO_ROT, sq, dest);
+//         sortable_move_list[move_count++] = make_sortable(mv);
+
+//         VERBOSE_LOG_MOVE(1, "After: %s\n",
+//                           get_move(sortable_move_list[move_count - 1]));
+//       }
+//       cardinal_dir_t cardinals[] = {
+//           cardinal_of_file_dir(NORTH), cardinal_of_file_dir(SOUTH),
+//           cardinal_of_rank_dir(EAST), cardinal_of_rank_dir(WEST)};
+//       for (int d = 0; d < (int)COUNT_OF(cardinals); d++) {
+//         cardinal_dir_t dir = cardinals[d];
+//         square_t victim_sq = take_cardinal_step(sq, dir);
+//         if (typ != PAWN)
+//           continue;  // only pawns can jump for these directions
+//         piece_t victim_piece = get_piece_at(&p->board, victim_sq);
+//         if (victim_piece.typ != PAWN ||
+//             victim_piece.color == color_to_move)
+//           continue;  // there must be a pawn in next square
+//         square_t dest = take_cardinal_step(victim_sq, dir);  // jump over next square
+//         bool blocked_jump = false;
+//         for (int next_dir = 0; next_dir < (int)COUNT_OF(cardinals); next_dir++) {
+//           square_t adjacent = take_cardinal_step(dest, cardinals[next_dir]);
+//           piece_t adj_piece = get_piece_at(&p->board, adjacent);
+//           if (!square_eq(adjacent, victim_sq) &&
+//               adj_piece.typ == PAWN &&
+//               adj_piece.color != color_to_move) {
+//             blocked_jump = true;
+//             break;
+//           }
+//         }
+//         if (blocked_jump) {
+//           continue;
+//         }
+//         if (get_piece_at(&p->board, dest).typ != EMPTY) continue;
+//         move_t mv = move_of(NO_ROT, sq, dest);
+//         sortable_move_list[move_count++] = make_sortable(mv);
+//       }
+
+//       // For all non-360-degree rotations (i.e., not rot==0, which is NONE)
+//       if (typ != MONARCH) {  
+//         for (int rot = 1; rot < NUM_ROT; ++rot) {
+//           tbassert(move_count < MAX_NUM_MOVES, "move_count: %d\n", move_count);
+//           move_t mv = move_of((rot_t)rot, sq, sq);
+//           sortable_move_list[move_count++] = make_sortable(mv);
+//         }
+//       }
+//     }
+//   }
+
+//   // null move
+//   if (!square_eq(fire_laser(p, color_to_move), INVALID_SQUARE)) {
+//     square_t monarch = get_monarch(&p->board, color_to_move);
+//     tbassert(get_piece_at(&p->board, monarch).typ == MONARCH,
+//              "Detected successful laser fire without monarch");
+//     move_t mv = move_of(NO_ROT, monarch, monarch);
+//     sortable_move_list[move_count++] = make_sortable(mv);
+//   }
+
+//   VERBOSE_LOG_MOVE_ARR(1, "\nGenerated moves: ", sortable_move_list,
+//                        move_count);
+//   return move_count;
+// }
 int generate_all(const position_t* p, sortable_move_t* sortable_move_list) {
   color_t color_to_move = color_to_move_of(p);
 
