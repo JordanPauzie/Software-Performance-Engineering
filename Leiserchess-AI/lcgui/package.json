@@ -1,0 +1,14 @@
+{
+    "name": "lcgui",
+    "private": true,
+    "workspaces": [
+        "packages/*"
+    ],
+    "devDependencies": {
+        "eslint-config-xo-react": "^0.27.0",
+        "eslint-plugin-react": "^7.37.2",
+        "eslint-plugin-react-hooks": "^5.0.0",
+        "prettier": "3.2.5",
+        "xo": "^0.59.3"
+    }
+}
