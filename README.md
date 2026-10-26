@@ -9,18 +9,15 @@ the job is to make it fast without breaking correctness. All work was done in te
 ---
 
 ## 1. Bit-matrix rotation
-*Team: Jordan Pauzie, [TEAMMATES]*
-
 Rotate a bit-packed square image by 90° in place, as fast as possible.
 
-- Replaced bit-by-bit rotation with a block-based approach that rotates
-  BLOCK_SIZE × BLOCK_SIZE tiles and cycles each tile through all four quadrants in one pass
-- [BIT-HACK TECHNIQUES USED, e.g. word-level masks, shifts, loop unrolling]
-- **Result:** [TIER / SPEEDUP]
+- Replaced bit-by-bit rotation with a block-based approach that rotates 16×16-bit tiles and
+  cycles each tile through all four quadrants in one pass, so every tile is read and written once
+- Each tile row is loaded as a 16-bit word, and bits are rotated with masks and shifts
+- Hot helpers are force-inlined with fully unrolled loops (`#pragma GCC unroll`) and `restrict`
+  pointers to rule out aliasing
 
 ## 2. N-body physics simulation and renderer
-*Team: Jordan Pauzie, [TEAMMATES]*
-
 Speed up a gravitational simulation of colliding spheres and the renderer that draws each frame.
 
 - **Rendering:** replaced per-pixel ray tracing with a projection algorithm. Spheres are
@@ -50,8 +47,6 @@ Speed up a gravitational simulation of colliding spheres and the renderer that d
 | 7 | 64 | Parallelized collision detection |
 
 ## 3. Memory allocator
-*Team: Jordan Pauzie, [TEAMMATES]*
-
 Write a `malloc`/`free`/`realloc` replacement scored on both throughput (against libc) and
 memory utilization.
 
@@ -60,11 +55,8 @@ memory utilization.
   into smaller size classes instead of wasted
 - `realloc` grows in place when the existing block already fits
 - Wrote a heap validator and consistency checker to catch corruption early
-- **Result:** [SCORE / UTILIZATION / THROUGHPUT]
 
 ## 4. Leiserchess game engine
-*Team: Jordan Pauzie, [TEAMMATES]*
-
 Make a game-playing engine for Leiserchess, a laser-chess variant, both faster and stronger.
 It was evaluated in automated head-to-head matches with Elo ratings.
 
@@ -75,7 +67,7 @@ It was evaluated in automated head-to-head matches with Elo ratings.
 - **Debugging the metric:** the team found that a search reporting depths over 7,000 was a bug,
   not a speedup. A broken Zobrist hash update made the search deep but almost empty. Fixing it
   and switching to Elo-based testing put the engine back on track.
-- **Parallel search:** principal-variation search with the Young Brothers Wait Concept and
+- **Parallel search, built together as a team:** principal-variation search with the Young Brothers Wait Concept and
   Jamboree-style parallel sibling search using Cilk work stealing, with early abort on beta cutoffs
 - **Result:** **60% win rate** against the baseline engine over 20 games, and depth 8 versus 7
   with a 30-second search. Also won our course's mini-tournament when every group's Leiserchess engine
