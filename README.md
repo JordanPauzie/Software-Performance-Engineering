@@ -22,7 +22,7 @@ Rotate a bit-packed square image by 90° in place, as fast as possible.
 - **Result:** [TIER / SPEEDUP]
 
 ## 2. N-body physics simulation and renderer
-*Team: Jordan Pauzie, Julian Savini (pair-programmed throughout)*
+*Team: Jordan Pauzie, [TEAMMATES]*
 
 Speed up a gravitational simulation of colliding spheres and the renderer that draws each frame.
 
@@ -66,7 +66,7 @@ memory utilization.
 - **Result:** [SCORE / UTILIZATION / THROUGHPUT]
 
 ## 4. Leiserchess game engine
-*Team: Jordan Pauzie, Julian Savini, Charlie Zhang*
+*Team: Jordan Pauzie, [TEAMMATES]*
 
 Make a game-playing engine for Leiserchess, a laser-chess variant, both faster and stronger.
 It was evaluated in automated head-to-head matches with Elo ratings.
