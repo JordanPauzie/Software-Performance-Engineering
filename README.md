@@ -81,7 +81,8 @@ It was evaluated in automated head-to-head matches with Elo ratings.
 - **Parallel search:** principal-variation search with the Young Brothers Wait Concept and
   Jamboree-style parallel sibling search using Cilk work stealing, with early abort on beta cutoffs
 - **Result:** **60% win rate** against the baseline engine over 20 games, and depth 8 versus 7
-  with a 30-second search
+  with a 30-second search. Also won our course's mini-tournament when every group's Leiserchess engine
+  was pitted against each other.
 
 **Lesson:** parallelizing the search added overhead without a net speedup at our search depths.
 Measuring with the right metric mattered more than any single optimization.
