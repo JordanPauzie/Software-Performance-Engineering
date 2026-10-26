@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+
+for d in ./simulations/*; do
+    ./bin/ref-test -c $d $d/s $d/r
+done

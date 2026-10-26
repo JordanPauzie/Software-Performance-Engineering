@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+
+for d in ./simulations/*; do
+    echo "generating eframes for $d"
+    ./bin/gen_eframes $d/s $d/r $d/x
+done
+
+for d in ./tiers/*; do
+    echo "generating eframes for tier $d"
+    ./bin/gen_eframes $d/s $d/r $d/x
+done

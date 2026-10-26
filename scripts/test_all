@@ -1,0 +1,53 @@
+#!/bin/bash
+
+function echo_info () {
+  echo -e "\033[0;36m$1\033[0m"
+}
+extra_flag=$1
+echo_info "[INFO] Running test_all.sh"
+echo "" > compile_log
+if [ $# -lt 1 ]; then
+	echo "Run locally with: $0 LOCAL=1"
+fi
+
+# CILKSAN
+echo_info "[INFO] Compiling with CILKSAN"
+make clean >> compile_log
+make CILKSAN=1 $extra_flag >> compile_log
+if [ ! -f "./bin/find-tier" ] || [ ! -f "./bin/ref-test" ]; then
+  echo_info "[ERROR] Compilation failure with CILKSAN"
+else
+  echo_info "[INFO] Compilation success, testing with CILKSAN"
+  ./bin/ref-test simulations/100/s simulations/100/r
+  ./bin/find-tier -m 0 -M 0
+fi
+
+# ASAN
+echo_info "[INFO] Compiling with ASAN"
+make clean >> compile_log
+make ASAN=1 $extra_flag >> compile_log
+if [ ! -f "./bin/find-tier" ] || [ ! -f "./bin/ref-test" ]; then
+  echo_info "[ERROR] Compilation failure with ASAN"
+else
+  echo_info "[INFO] Compilation success, testing with ASAN"
+  # use unbuffer to preserve colors
+  unbuffer ./bin/ref-test simulations/100/s simulations/100/r 2>&1 | asan_symbolize
+  unbuffer ./bin/find-tier -m 0 -M 0 2>&1 | asan_symbolize
+fi
+
+# Normal make (without CILKSAN or ASAN)
+echo_info "[INFO] Compiling without CILKSAN and ASAN"
+make clean >> compile_log
+make $extra_flag >> compile_log
+if [ ! -f "./bin/find-tier" ] || [ ! -f "./bin/ref-test" ]; then
+  echo_info "[ERROR] Compilation failure without CILKSAN and ASAN"
+else
+  # Correctness
+  echo_info "[INFO] Compilation success, testing correctness"
+  echo_info "[INFO] Running ./scripts/test_simulations"
+  ./scripts/test_simulations
+  echo_info "[INFO] Running ./scripts/correctness_hashes 80"
+  ./scripts/correctness_hashes 80
+fi
+
+echo_info "[INFO] Finished testing $shortname"

@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+
+if [ $# -lt 1 ]; then
+	echo "Usage: $0 <number>"
+	exit 1
+fi
+
+for ((t = 0; t <= $1; t++)); do
+	temp=$(mktemp)
+	./bin/gen_eframes -r -s -h tiers/$t/s tiers/$t/r $temp
+	if diff $temp hashes/$t; then
+		echo -e "Tier $t: \033[0;32mPASS\033[0m"
+	else
+		echo -e "Tier $t: \033[0;31mFAIL\033[0m"
+	fi 
+done
