@@ -4,9 +4,6 @@ Projects from Software Performance Engineering (Tufts CS 151, Fall 2025), a cour
 MIT 6.106. Each project hands you working but slow C code and a performance benchmark;
 the job is to make it fast without breaking correctness. All work was done in teams.
 
-> Source code is kept private to respect the course's academic integrity policy.
-> Happy to walk through it in an interview — just ask.
-
 **Tools:** C, OpenCilk (fork-join parallelism), perf, Linux, TACC Stampede3
 
 ---
