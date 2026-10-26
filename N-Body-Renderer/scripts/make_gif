@@ -1,0 +1,8 @@
+#!/bin/bash
+
+echo "Creating gif for $1"
+./bin/gen_eframes -s -r "$1/s" "$1/r" frames.out
+./bin/diff2gif frames.out
+mkdir -p "output/$(dirname "$1")"
+mv out.gif "output/$1.gif"
+rm frames.out

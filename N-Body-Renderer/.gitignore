@@ -1,0 +1,4 @@
+*.o
+*.out
+*.gif
+compile_log
