@@ -1,0 +1,5 @@
+*log.awsrun/
+*.o
+*.d
+snailspeed/rotate
+snailspeed/.buildmode
